@@ -39,31 +39,23 @@
   </div>
 </template>
 
-import { ref } from 'vue';
-
 <script setup>
 import RouteConstants from '~/constants/RouteConstants'
 import { useList } from '~/composables/useList'
 import Transaction from '~/models/Transaction'
 import { useToolbar } from '~/composables/useToolbar'
 import EmptyList from '~/components/general/empty-list.vue'
-import { ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import TransactionRepository from '~/repository/TransactionRepository'
-import Tag from '~/models/Tag.js'
-import Account from '~/models/Account.js'
-import Category from '~/models/Category.js'
-import { cloneDeep, get, isEqual } from 'lodash'
+import { cloneDeep, isEqual } from 'lodash'
 import { animateSwipeList } from '~/utils/AnimationUtils.js'
-import Budget from '~/models/Budget.js'
 import TransactionFilterUtils from '~/utils/TransactionFilterUtils.js'
 import TablerIconConstants from '~/constants/TablerIconConstants.js'
-import { filterBagHasValues, getActiveFilters, getFiltersFromURL, saveToUrl } from '~/utils/FilterUtils.js'
+import { filterBagHasValues, getFiltersFromURL, saveToUrl } from '~/utils/FilterUtils.js'
 import { useListFilters } from '~/composables/useListFilters.js'
 import { IconSquareRoundedX } from '@tabler/icons-vue'
 
-const dataStore = useDataStore()
 const profileStore = useProfileStore()
-const route = useRoute()
 
 const transactionFiltersRef = ref(null)
 
@@ -100,23 +92,37 @@ let { filters, filtersBackendList, filtersDisplayList, activeFilters } = useList
   filterDefinitions: Object.values(TransactionFilterUtils.filters),
 })
 
-watch(filtersBackendList, (newValue, oldValue) => {
-  if (isEqual(newValue, oldValue)) {
-    return
-  }
-  onRefresh()
-})
+// Keep track of the persisted payload so the deep watcher does not spam storage updates.
+let lastPersistedFilters = cloneDeep(profileStore.transactionListFilters ?? {})
 
-watch(filters, (newValue, oldValue) => {
-  if (isEqual(newValue, oldValue)) {
-    return
+watch(
+  filtersBackendList,
+  (newValue, oldValue) => {
+    if (isEqual(newValue, oldValue)) {
+      return
+    }
+    onRefresh()
   }
-  saveToUrl(activeFilters.value)
-  saveFiltersToProfile()
-})
+)
 
-const saveFiltersToProfile = () => {
-  profileStore.transactionListFilters = filters.value
+watch(
+  filters,
+  () => {
+    const snapshot = cloneDeep(filters.value ?? {})
+    if (isEqual(snapshot, lastPersistedFilters)) {
+      return
+    }
+
+    saveToUrl(activeFilters.value)
+    saveFiltersToProfile(snapshot)
+  },
+  { deep: true }
+)
+
+const saveFiltersToProfile = (snapshot) => {
+  const persistedSnapshot = cloneDeep(snapshot)
+  profileStore.transactionListFilters = persistedSnapshot
+  lastPersistedFilters = persistedSnapshot
 }
 
 const onClearFilters = () => {
@@ -133,11 +139,14 @@ toolbar.init({
 
 onMounted(() => {
   let filterDefinitions = Object.values(TransactionFilterUtils.filters)
-  filters.value = getFiltersFromURL(filterDefinitions)
+  const urlFilters = getFiltersFromURL(filterDefinitions)
 
-  if (!filterBagHasValues(filters.value)) {
-    filters.value = TransactionFilterUtils.getPredefinedFilters()
+  if (filterBagHasValues(urlFilters)) {
+    filters.value = urlFilters
+    return
   }
+
+  filters.value = cloneDeep(TransactionFilterUtils.getPredefinedFilters())
 })
 
 animateSwipeList(list)

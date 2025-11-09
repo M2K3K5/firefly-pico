@@ -1,4 +1,4 @@
-import { get, isArray } from 'lodash'
+import { cloneDeep, get } from 'lodash'
 import Transaction from '~/models/Transaction.js'
 import Tag from '~/models/Tag.js'
 import Category from '~/models/Category.js'
@@ -6,6 +6,8 @@ import Budget from '~/models/Budget.js'
 import Account from '~/models/Account.js'
 import { useProfileStore } from '~/stores/profileStore.js'
 import { translate } from '~/plugins/plugin-i18n.js'
+import DateUtils from '~/utils/DateUtils.js'
+import { ellipsizeText } from '~/utils/Utils.js'
 
 export default {
   /*
@@ -143,7 +145,17 @@ export default {
 
   getPredefinedFilters() {
     let profileStore = useProfileStore()
-    return profileStore.transactionListFilters
+    let storedFilters = cloneDeep(profileStore.transactionListFilters ?? {})
+
+    if (storedFilters.dateStart) {
+      storedFilters.dateStart = DateUtils.autoToDate(storedFilters.dateStart)
+    }
+
+    if (storedFilters.dateEnd) {
+      storedFilters.dateEnd = DateUtils.autoToDate(storedFilters.dateEnd)
+    }
+
+    return storedFilters
   },
 
   getValuesFromDictionary(value, dictionary) {
